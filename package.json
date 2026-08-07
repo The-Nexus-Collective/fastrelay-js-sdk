@@ -1,0 +1,29 @@
+{
+  "name": "fastrelay-feed-sdk",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript SDK for fastrelay feed APIs.",
+  "homepage": "https://github.com/The-Nexus-Collective/fastrelay-js-sdk",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
