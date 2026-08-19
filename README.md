@@ -17,13 +17,13 @@ JavaScript/TypeScript SDK for [fastrelay](https://fastrelay.io) activity feeds â
 ## Install
 
 ```bash
-npm install fastrelay-js-sdk
+npm install @fastrelay/js-sdk
 ```
 
 ## Quick start
 
 ```ts
-import { FastrelayClient } from 'fastrelay-js-sdk';
+import { FastrelayClient } from '@fastrelay/js-sdk';
 
 const fastrelay = new FastrelayClient({
   apiKey: 'your_api_key',
@@ -87,7 +87,7 @@ Reconnects use exponential backoff with jitter; close code `4003` triggers a tok
 ## Polling fallback
 
 ```ts
-import { FeedPollingService } from 'fastrelay-js-sdk';
+import { FeedPollingService } from '@fastrelay/js-sdk';
 
 const polling = new FeedPollingService(fastrelay);
 const stop = polling.pollFeed('timeline', 'john', {
@@ -100,7 +100,7 @@ const stop = polling.pollFeed('timeline', 'john', {
 ## Video upload
 
 ```ts
-import { uploadVideoBytes } from 'fastrelay-js-sdk';
+import { uploadVideoBytes } from '@fastrelay/js-sdk';
 
 const result = await uploadVideoBytes(fastrelay, {
   data: fileBytes, // Uint8Array | ArrayBuffer
@@ -114,7 +114,7 @@ const result = await uploadVideoBytes(fastrelay, {
 ## Error handling
 
 ```ts
-import { FastrelayApiError } from 'fastrelay-js-sdk';
+import { FastrelayApiError } from '@fastrelay/js-sdk';
 
 try {
   await fastrelay.getActivity('missing');
