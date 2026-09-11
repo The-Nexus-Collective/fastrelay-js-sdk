@@ -1,9 +1,25 @@
 {
   "name": "@fastrelay/js-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "JavaScript/TypeScript SDK for fastrelay feed APIs.",
   "homepage": "https://github.com/The-Nexus-Collective/fastrelay-js-sdk",
-  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/The-Nexus-Collective/fastrelay-js-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/The-Nexus-Collective/fastrelay-js-sdk/issues"
+  },
+  "keywords": [
+    "fastrelay",
+    "feed",
+    "activity-feed",
+    "realtime",
+    "websocket",
+    "sdk",
+    "typescript"
+  ],
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,6 +37,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "test": "node --test 'test/*.test.ts'"
   },
   "devDependencies": {

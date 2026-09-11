@@ -130,5 +130,5 @@ try {
 ```bash
 npm install
 npm run build   # tsc -> dist/
-npm test        # node --test (Node 23+ runs TS directly)
+npm test        # node --test (needs Node 22.6+ to run .ts directly)
 ```

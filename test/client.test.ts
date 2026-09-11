@@ -172,7 +172,7 @@ test('feed helpers hit the right paths', async () => {
   await feed.getActivities({ limit: 10, filter: { type: 'post' } });
   assert.equal(
     calls[0].url,
-    'http://localhost:8080/v1/feeds/user/john/activities?limit=10&filter%5Btype%5D=post',
+    'https://api.fastrelay.io/v1/feeds/user/john/activities?limit=10&filter%5Btype%5D=post',
   );
 
   await feed.addActivity({ type: 'post', text: 'hi' });
@@ -182,6 +182,6 @@ test('feed helpers hit the right paths', async () => {
   assert.equal(calls[2].init.method, 'DELETE');
   assert.equal(
     calls[2].url,
-    'http://localhost:8080/v1/feeds/user/john/follows/team:eng?keepHistory=true',
+    'https://api.fastrelay.io/v1/feeds/user/john/follows/team:eng?keepHistory=true',
   );
 });

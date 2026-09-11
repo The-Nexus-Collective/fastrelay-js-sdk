@@ -73,7 +73,7 @@ export class FastrelayClient {
 
   constructor(options: FastrelayClientOptions) {
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl ?? 'http://localhost:8080';
+    this.baseUrl = options.baseUrl ?? 'https://api.fastrelay.io';
     this.token = options.token;
     this.user = options.user ? { ...options.user } : undefined;
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
