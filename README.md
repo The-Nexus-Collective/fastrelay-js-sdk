@@ -54,6 +54,8 @@ const off = timeline.on('activity.created', (event) => {
 
 The SDK is client-only: every request is sent with `Authorization: Bearer <user JWT>` once `connectUser()` or `setToken()` has been called. Per-request override via options: `{ auth: 'auto' | 'user' | 'none' }` (`'server'` throws — call server endpoints from your backend).
 
+When `connectUser()` got a `tokenProvider`, an expired JWT renews itself: a request that answers `401` asks the provider for a fresh token, stores it (`setToken`, socket included) and is retried once. Concurrent 401s share one provider call; if the provider fails, the original `401` is thrown.
+
 ```ts
 await fastrelay.getActivity('activity_id', { auth: 'user', idempotencyKey: 'key' });
 ```

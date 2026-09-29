@@ -185,3 +185,98 @@ test('feed helpers hit the right paths', async () => {
     'https://api.fastrelay.io/v1/feeds/user/john/follows/team:eng?keepHistory=true',
   );
 });
+
+function authOf(init: RequestInit): string | undefined {
+  return (init.headers as Record<string, string>).authorization;
+}
+
+// Answers 401 "Invalid session" to every token except `valid`.
+function expiringFetch(valid: () => string) {
+  return fakeFetch((_url, init) =>
+    authOf(init) === `Bearer ${valid()}`
+      ? jsonResponse({ id: 'a1' })
+      : jsonResponse({ error: { message: 'Invalid session' } }, 401),
+  );
+}
+
+test('a 401 refreshes the token via tokenProvider and retries once', async () => {
+  let valid = 'token-1';
+  const { fetch, calls } = expiringFetch(() => valid);
+  const client = new FastrelayClient({ apiKey: 'k', fetch });
+  let refreshes = 0;
+  await client.connectUser({ id: 'u1' }, 'token-1', {
+    tokenProvider: async () => {
+      refreshes += 1;
+      return 'token-2';
+    },
+  });
+  valid = 'token-2';
+
+  const [a, b] = await Promise.all([client.getActivity('a1'), client.getActivity('a2')]);
+  assert.deepEqual(a, { id: 'a1' });
+  assert.deepEqual(b, { id: 'a1' });
+  assert.equal(refreshes, 1);
+  assert.equal(client.token, 'token-2');
+  assert.deepEqual(calls.map((call) => authOf(call.init)), [
+    'Bearer token-1',
+    'Bearer token-1',
+    'Bearer token-2',
+    'Bearer token-2',
+  ]);
+});
+
+test('a 401 without tokenProvider, or with a failing one, throws the 401', async () => {
+  const { fetch, calls } = expiringFetch(() => 'never');
+  const client = new FastrelayClient({ apiKey: 'k', fetch });
+  await client.connectUser({ id: 'u1' }, 'token-1');
+  await assert.rejects(client.getActivity('a1'), /Invalid session/);
+  assert.equal(calls.length, 1);
+
+  await client.connectUser({ id: 'u1' }, 'token-1', {
+    tokenProvider: async () => {
+      throw new Error('offline');
+    },
+  });
+  await assert.rejects(client.getActivity('a1'), (error: unknown) => {
+    assert.ok(error instanceof FastrelayApiError);
+    assert.equal(error.status, 401);
+    return true;
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(client.token, 'token-1');
+});
+
+test('a refresh that finishes after disconnectUser is dropped', async () => {
+  const { fetch, calls } = expiringFetch(() => 'token-2');
+  const client = new FastrelayClient({ apiKey: 'k', fetch });
+  let release: (token: string) => void = () => {};
+  await client.connectUser({ id: 'u1' }, 'token-1', {
+    tokenProvider: () => new Promise<string>((resolve) => (release = resolve)),
+  });
+
+  const pending = assert.rejects(client.getActivity('a1'), /Invalid session/);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  client.disconnectUser();
+  release('token-2');
+  await pending;
+  assert.equal(client.token, undefined);
+  assert.equal(calls.length, 1);
+});
+
+test('a caller-supplied authorization header is not refreshed', async () => {
+  const { fetch, calls } = expiringFetch(() => 'never');
+  const client = new FastrelayClient({ apiKey: 'k', fetch });
+  let refreshes = 0;
+  await client.connectUser({ id: 'u1' }, 'token-1', {
+    tokenProvider: async () => {
+      refreshes += 1;
+      return 'token-2';
+    },
+  });
+  await assert.rejects(
+    client.getActivity('a1', { headers: { authorization: 'Bearer custom' } }),
+    /Invalid session/,
+  );
+  assert.equal(refreshes, 0);
+  assert.equal(calls.length, 1);
+});
