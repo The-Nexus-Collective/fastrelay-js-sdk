@@ -70,6 +70,10 @@ export class FastrelayClient {
 
   private readonly fetchImpl: typeof fetch;
   private readonly socketFactory?: FastrelayRealtimeSocketFactory;
+  private tokenProvider?: FastrelayTokenProvider;
+  // Bumped on every connect/disconnect so a refresh that outlives its session is dropped.
+  private session = 0;
+  private pendingToken?: Promise<string | undefined>;
 
   constructor(options: FastrelayClientOptions) {
     this.apiKey = options.apiKey;
@@ -106,8 +110,11 @@ export class FastrelayClient {
 
     const previousUser = this.user;
     const previousToken = this.token;
+    const previousTokenProvider = this.tokenProvider;
+    this.session += 1;
     this.user = { ...user };
     this.token = token;
+    this.tokenProvider = options.tokenProvider;
 
     if (options.upsertUser) {
       try {
@@ -124,6 +131,7 @@ export class FastrelayClient {
       } catch (error) {
         this.user = previousUser;
         this.token = previousToken;
+        this.tokenProvider = previousTokenProvider;
         throw error;
       }
     }
@@ -144,8 +152,10 @@ export class FastrelayClient {
   disconnectUser(): this {
     this.realtime?.dispose();
     this.realtime = undefined;
+    this.session += 1;
     this.user = undefined;
     this.token = undefined;
+    this.tokenProvider = undefined;
     return this;
   }
 
@@ -865,11 +875,27 @@ export class FastrelayClient {
       requestBody = JSON.stringify(body);
     }
 
-    const response = await this.fetchImpl(url, {
+    let response = await this.fetchImpl(url, {
       method,
       headers,
       body: requestBody,
     });
+    // An expired user token: fetch a fresh one via tokenProvider and retry once. A caller's
+    // own authorization header is left alone.
+    if (
+      response.status === 401 &&
+      authorization &&
+      headers.authorization === authorization
+    ) {
+      const token = await this.freshTokenAfter(authorization);
+      if (token) {
+        response = await this.fetchImpl(url, {
+          method,
+          headers: { ...headers, authorization: `Bearer ${token}` },
+          body: requestBody,
+        });
+      }
+    }
     const text = await response.text();
     const parsed = parseJsonSafely(text);
 
@@ -908,6 +934,32 @@ export class FastrelayClient {
 
     if (parsed === null || parsed === '') return null;
     return parsed;
+  }
+
+  /**
+   * A token newer than the one a 401 came back for: the current one if another request
+   * already refreshed it, else one from tokenProvider. Concurrent 401s share one call.
+   * Undefined when there is no provider, it fails, or the session changed meanwhile.
+   */
+  private async freshTokenAfter(rejected: string): Promise<string | undefined> {
+    if (this.token && `Bearer ${this.token}` !== rejected) return this.token;
+    const provider = this.tokenProvider;
+    if (!provider) return undefined;
+    const session = this.session;
+    this.pendingToken ??= (async () => {
+      try {
+        const token = (await provider()).trim();
+        if (token === '' || session !== this.session) return undefined;
+        this.setToken(token);
+        return token;
+      } catch {
+        return undefined;
+      } finally {
+        this.pendingToken = undefined;
+      }
+    })();
+    const token = await this.pendingToken;
+    return session === this.session ? token : undefined;
   }
 
   private buildAuthorization(auth: FastrelayAuthMode): string | undefined {
