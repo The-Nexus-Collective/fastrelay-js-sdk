@@ -217,3 +217,40 @@ export interface FeedActivityQuery {
   filter?: Record<string, unknown>;
   [key: string]: unknown;
 }
+
+export interface UpdateUserRequest {
+  displayName?: string | null;
+  profileData?: Record<string, unknown> | null;
+  role?: string | null;
+}
+
+export interface CreateFeedRequest {
+  userId?: string | null;
+  visibility?: string | null;
+}
+
+export interface FeedSettingsRequest {
+  followApproval?: string | null;
+}
+
+export interface CreateActivityRequest {
+  id?: string | null;
+  type: string;
+  text?: string | null;
+  userId?: string | null;
+  feeds: string[];
+  custom?: Record<string, unknown> | null;
+  visibility?: string;
+  expiresAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface UpdateActivityRequest {
+  text?: string | null;
+  custom?: Record<string, unknown> | null;
+  visibility?: string | null;
+}
+
+export interface BatchGetActivitiesRequest {
+  ids: string[];
+}

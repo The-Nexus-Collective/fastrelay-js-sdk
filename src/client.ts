@@ -22,6 +22,12 @@ import type {
   FastrelayVideo,
   FastrelayVideoUploadUrl,
   FeedActivityQuery,
+  BatchGetActivitiesRequest,
+  CreateActivityRequest,
+  CreateFeedRequest,
+  FeedSettingsRequest,
+  UpdateActivityRequest,
+  UpdateUserRequest,
   NotificationPage,
 } from './types.ts';
 import {
@@ -194,7 +200,7 @@ export class FastrelayClient {
 
   updateUser(
     id: string,
-    request: Record<string, unknown>,
+    request: UpdateUserRequest,
     options?: FastrelayRequestOptions,
   ): Promise<FastrelayUser> {
     return this.request('PATCH', `/v1/users/${enc(id)}`, {
@@ -208,7 +214,7 @@ export class FastrelayClient {
   getOrCreateFeed(
     group: string,
     id: string,
-    request: Record<string, unknown> = {},
+    request: CreateFeedRequest = {},
     options?: FastrelayRequestOptions,
   ): Promise<any> {
     return this.request('POST', `/v1/feeds/${enc(group)}/${enc(id)}`, {
@@ -265,7 +271,7 @@ export class FastrelayClient {
   updateFeedSettings(
     group: string,
     id: string,
-    request: Record<string, unknown>,
+    request: FeedSettingsRequest,
     options?: FastrelayRequestOptions,
   ): Promise<any> {
     return this.request('PUT', `/v1/feeds/${enc(group)}/${enc(id)}/settings`, {
@@ -425,7 +431,7 @@ export class FastrelayClient {
   // ---- activities ------------------------------------------------------
 
   addActivity(
-    request: Record<string, unknown>,
+    request: CreateActivityRequest,
     options?: FastrelayRequestOptions,
   ): Promise<FastrelayActivity> {
     return this.request('POST', '/v1/activities', { body: request, options });
@@ -440,7 +446,7 @@ export class FastrelayClient {
 
   updateActivity(
     id: string,
-    request: Record<string, unknown>,
+    request: UpdateActivityRequest,
     options?: FastrelayRequestOptions,
   ): Promise<FastrelayActivity> {
     return this.request('PATCH', `/v1/activities/${enc(id)}`, {
@@ -454,7 +460,7 @@ export class FastrelayClient {
   }
 
   batchGetActivities(
-    requestOrIds: string[] | Record<string, unknown>,
+    requestOrIds: string[] | BatchGetActivitiesRequest,
     options?: FastrelayRequestOptions,
   ): Promise<any> {
     const body = Array.isArray(requestOrIds)
