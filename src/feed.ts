@@ -7,7 +7,10 @@ import type {
   FastrelayFeedActivityPin,
   FastrelayReaction,
   FastrelayRealtimeEvent,
+  CreateActivityRequest,
+  CreateFeedRequest,
   FeedActivityQuery,
+  FeedSettingsRequest,
   NotificationPage,
 } from './types.ts';
 import type { FeedTarget } from './utils.ts';
@@ -60,7 +63,7 @@ export class FastrelayFeed {
   }
 
   getOrCreate(
-    request: Record<string, unknown> = {},
+    request: CreateFeedRequest = {},
     options?: FastrelayRequestOptions,
   ): Promise<any> {
     return this.client.getOrCreateFeed(this.group, this.feedId, request, options);
@@ -93,7 +96,7 @@ export class FastrelayFeed {
   }
 
   addActivity(
-    activity: Record<string, unknown>,
+    activity: Omit<CreateActivityRequest, 'feeds'> & { feeds?: string[] },
     options?: FastrelayRequestOptions,
   ): Promise<FastrelayActivity> {
     const feeds = Array.isArray(activity.feeds)
@@ -112,7 +115,7 @@ export class FastrelayFeed {
   }
 
   updateSettings(
-    settings: Record<string, unknown>,
+    settings: FeedSettingsRequest,
     options?: FastrelayRequestOptions,
   ): Promise<any> {
     return this.client.updateFeedSettings(this.group, this.feedId, settings, options);
