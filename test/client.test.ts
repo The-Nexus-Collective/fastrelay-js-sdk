@@ -280,3 +280,61 @@ test('a caller-supplied authorization header is not refreshed', async () => {
   assert.equal(refreshes, 0);
   assert.equal(calls.length, 1);
 });
+
+test('uploadFileDirect reserves, PUTs to storage and confirms', async () => {
+  const uploadUrl =
+    'https://bucket.spaces.test/feed/app_x/file_1.png?X-Amz-Credential=key%2F20261030&X-Amz-Signature=sig';
+  const { fetch, calls } = fakeFetch((url) => {
+    if (url.endsWith('/v1/files/uploads')) {
+      return jsonResponse({
+        fileId: 'file_1',
+        uploadUrl,
+        requiredHeaders: { 'content-type': 'image/png', 'content-length': '3' },
+        expiresAt: '2026-10-30T10:15:00Z',
+      });
+    }
+    if (url === uploadUrl) return new Response(null, { status: 200 });
+    return jsonResponse({ id: 'file_1', url: 'https://cdn.example/f.png', type: 'image' });
+  });
+  const client = new FastrelayClient({ apiKey: 'k', baseUrl: 'http://x.test', token: 't', fetch });
+
+  const file = await client.uploadFileDirect(new Uint8Array([1, 2, 3]), 'image/png');
+
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].url, 'http://x.test/v1/files/uploads');
+  assert.deepEqual(JSON.parse(String(calls[0].init.body)), {
+    contentType: 'image/png',
+    sizeBytes: 3,
+  });
+  const put = calls[1];
+  assert.equal(put.url, uploadUrl);
+  assert.equal(put.init.method, 'PUT');
+  assert.deepEqual(put.init.headers, { 'content-type': 'image/png' });
+  assert.equal((put.init.body as Blob).size, 3);
+  assert.equal(calls[2].url, 'http://x.test/v1/files/file_1/confirm');
+  assert.equal(calls[2].init.method, 'POST');
+  assert.equal(file.id, 'file_1');
+});
+
+test('uploadFileDirect does not confirm when storage rejects the PUT', async () => {
+  const { fetch, calls } = fakeFetch((url) =>
+    url.endsWith('/v1/files/uploads')
+      ? jsonResponse({
+          fileId: 'file_1',
+          uploadUrl: 'https://bucket.spaces.test/f.png',
+          requiredHeaders: { 'content-type': 'image/png' },
+          expiresAt: '2026-10-30T10:15:00Z',
+        })
+      : new Response('<Error>SignatureDoesNotMatch</Error>', { status: 403 }),
+  );
+  const client = new FastrelayClient({ apiKey: 'k', baseUrl: 'http://x.test', token: 't', fetch });
+
+  await assert.rejects(
+    client.uploadFileDirect(new Uint8Array([1, 2, 3]), 'image/png'),
+    (error: unknown) =>
+      error instanceof FastrelayApiError &&
+      error.status === 403 &&
+      error.code === 'FILE_UPLOAD_FAILED',
+  );
+  assert.equal(calls.length, 2);
+});

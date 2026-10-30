@@ -14,6 +14,7 @@ import type {
   FastrelayFeedActivityPin,
   FastrelayFeedback,
   FastrelayFile,
+  FastrelayFileUpload,
   FastrelayModerationFlag,
   FastrelayPoll,
   FastrelayReaction,
@@ -723,6 +724,70 @@ export class FastrelayClient {
     }
 
     return this.request('POST', '/v1/files', { form, options });
+  }
+
+  /**
+   * Uploads an image or video straight to storage instead of through the API: reserves
+   * the file, PUTs the bytes to the presigned URL and confirms it. `contentType` must be
+   * an `image/*` or `video/*` type matching the bytes; use `uploadFile` for anything else.
+   * In browsers the storage bucket needs a CORS rule allowing `PUT` from the app's origin.
+   */
+  async uploadFileDirect(
+    data: Blob | ArrayBuffer | Uint8Array,
+    contentType: string,
+    { type }: { type?: string } = {},
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayFile> {
+    const blob =
+      data instanceof Blob ? data : new Blob([data as BlobPart]);
+    if (blob.size === 0) {
+      throw new TypeError('uploadFileDirect requires non-empty data.');
+    }
+
+    const upload = await this.createFileUpload(
+      { contentType, sizeBytes: blob.size, type },
+      options,
+    );
+    // fetch derives Content-Length from the body (browsers refuse to set it by hand), and
+    // the body is exactly the signed size.
+    const headers = Object.fromEntries(
+      Object.entries(upload.requiredHeaders).filter(
+        ([name]) => name.toLowerCase() !== 'content-length',
+      ),
+    );
+    const response = await this.fetchImpl(upload.uploadUrl, {
+      method: 'PUT',
+      headers,
+      body: blob,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      const text = await response.text();
+      throw new FastrelayApiError({
+        message:
+          `File upload to storage failed (${response.status} ${response.statusText}). ${text}`.trim(),
+        status: response.status,
+        code: 'FILE_UPLOAD_FAILED',
+        method: 'PUT',
+      });
+    }
+
+    return this.confirmFileUpload(upload.fileId, options);
+  }
+
+  /** Reserves a pending image or video file and returns a presigned PUT URL. Prefer `uploadFileDirect`. */
+  createFileUpload(
+    request: { contentType: string; sizeBytes: number; type?: string },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayFileUpload> {
+    return this.request('POST', '/v1/files/uploads', { body: request, options });
+  }
+
+  /**
+   * Makes an uploaded file available. Rejects with a 409 `FILE_NOT_UPLOADED` error while
+   * the object is missing or incomplete; the call can be retried.
+   */
+  confirmFileUpload(fileId: string, options?: FastrelayRequestOptions): Promise<FastrelayFile> {
+    return this.request('POST', `/v1/files/${enc(fileId)}/confirm`, { options });
   }
 
   deleteFile(fileId: string, options?: FastrelayRequestOptions): Promise<void> {
