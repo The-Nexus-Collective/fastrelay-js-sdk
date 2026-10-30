@@ -93,6 +93,18 @@ export interface FastrelayFile {
   createdAt: string;
 }
 
+/**
+ * A presigned direct upload reserved by `POST /v1/files/uploads`. PUT the file body to
+ * `uploadUrl` with every entry of `requiredHeaders` before `expiresAt`, then call
+ * `confirmFileUpload(fileId)`.
+ */
+export interface FastrelayFileUpload {
+  fileId: string;
+  uploadUrl: string;
+  requiredHeaders: Record<string, string>;
+  expiresAt: string;
+}
+
 export interface FastrelayModerationFlag {
   id: string;
   reporterId: string;

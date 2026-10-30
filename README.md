@@ -7,7 +7,7 @@ JavaScript/TypeScript SDK for [fastrelay](https://fastrelay.io) activity feeds â
 - Zero runtime dependencies â€” native `fetch`, `FormData`, `WebSocket`
 - Realtime subscriptions with automatic reconnect + token refresh
 - Polling fallback for non-realtime environments
-- Direct-to-storage video uploads (tus / Cloudflare Stream)
+- Direct-to-storage image uploads (presigned PUT) and video uploads (tus / Cloudflare Stream)
 - Structured `FastrelayApiError` with rate-limit metadata
 
 ## Requirements
@@ -70,7 +70,7 @@ await fastrelay.addCommentReaction(comment.id, 'like');
 const comments = await fastrelay.listComments(activity.id, { sort: 'top', limit: 10 });
 ```
 
-Also available: bookmarks (`addBookmark`/`removeBookmark`/`listBookmarks`), pins (`feed.pinActivity`), polls (`createPoll`, `vote`), follows (`feed.follow`, `feed.listFollowers`), feed members, moderation (`createFlag`, `createMute`), feedback (`submitFeedback`), file upload (`uploadFile`).
+Also available: bookmarks (`addBookmark`/`removeBookmark`/`listBookmarks`), pins (`feed.pinActivity`), polls (`createPoll`, `vote`), follows (`feed.follow`, `feed.listFollowers`), feed members, moderation (`createFlag`, `createMute`), feedback (`submitFeedback`), file upload (`uploadFile`, `uploadFileDirect`).
 
 ## Realtime
 
@@ -98,6 +98,17 @@ const stop = polling.pollFeed('timeline', 'john', {
 });
 // polling.pause() / polling.resume() / polling.dispose()
 ```
+
+## File upload
+
+`uploadFileDirect` sends an image or video straight to storage: it reserves the file, PUTs the bytes to a presigned URL and confirms the upload. The content type must be an `image/*` or `video/*` type that matches the bytes.
+
+```ts
+const file = await fastrelay.uploadFileDirect(photo, 'image/jpeg'); // Blob | ArrayBuffer | Uint8Array
+console.log(file.url);
+```
+
+For other content types, `uploadFile(data, filename)` uploads through the API as multipart.
 
 ## Video upload
 
