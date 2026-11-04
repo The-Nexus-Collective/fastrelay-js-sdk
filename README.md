@@ -1,6 +1,6 @@
 # fastrelay Feed JS SDK
 
-JavaScript/TypeScript SDK for [fastrelay](https://fastrelay.io) activity feeds — feeds, activities, reactions, comments, polls, video uploads, moderation, and realtime updates over WebSocket.
+JavaScript/TypeScript SDK for [fastrelay](https://fastrelay.io) activity feeds and chat — feeds, activities, reactions, comments, polls, conversations and messages, video uploads, moderation, and realtime updates over WebSocket.
 
 - Feed-first API: `fastrelay.feed(group, id)`
 - Client-only by design: user (JWT) auth, no server secrets in the app
@@ -85,6 +85,77 @@ off(); // unsubscribes (frames are batched over the socket)
 ```
 
 Reconnects use exponential backoff with jitter; close code `4003` triggers a token refresh via `tokenProvider`, `4002`/`4029` are fatal. Duplicate `eventId`s are dropped.
+
+## Chat
+
+Direct and group conversations on the same user, token and socket as feeds.
+
+```ts
+// A direct conversation is returned as-is if it already exists.
+const dm = await fastrelay.createConversation({ kind: 'direct', members: ['bob'] });
+const group = await fastrelay.createConversation({ members: ['bob', 'carol'], name: 'Eng' });
+
+// The user's conversations, most recent message first, with unread counts and last message.
+const { data: inbox, nextCursor } = await fastrelay.queryConversations({
+  filter: { hasUnread: true },
+  limit: 20,
+});
+
+await fastrelay.sendMessage(dm.id, { text: 'Hi!' }, { idempotencyKey: crypto.randomUUID() });
+const history = await fastrelay.listMessages(dm.id, { limit: 50 }); // ascending seq
+const older = await fastrelay.listMessages(dm.id, { cursor: history.nextCursor!, direction: 'older' });
+
+await fastrelay.markConversationRead(dm.id); // returns { totalUnread, unreadConversations }
+const totals = await fastrelay.getUnreadTotals();
+```
+
+Also: `getConversation`, `updateConversation` (name, image, custom, `presenceEnabled`, `frozen`), `deleteConversation`, `truncateConversation`, `listConversationMembers`, `addConversationMembers`, `updateConversationMember` (role, `banned`/`muted` restriction), `removeConversationMember` (your own id leaves), `updateMessage`, `deleteMessage`. Block a user with `createMute(userId, { type: 'block' })`; report a message with `createFlag('message', messageId, { reason })`.
+
+### Realtime chat
+
+Chat events reach every member automatically — no subscription:
+
+```ts
+const realtime = fastrelay.realtime!;
+realtime.startPresence(); // appear online; re-sent after reconnects, disconnect to go offline
+
+realtime.onChatEvent((event) => {
+  switch (event.type) {
+    case 'message.new':
+      render(event.data.message);
+      realtime.markDelivered(event.data.message.conversationId, event.data.message.seq);
+      break;
+    case 'typing.start':
+      showTyping(event.conversationId, event.data.userId);
+      break;
+    case 'unread.updated':
+      setBadge(event.data.totals.totalUnread);
+      break;
+    // message.updated|deleted, conversation.updated|truncated|deleted, member.added|removed|updated,
+    // receipt.delivered|read, typing.stop, presence.changed
+  }
+});
+
+realtime.startTyping(conversationId); // stopTyping(conversationId) when done
+if (!realtime.markRead(conversationId)) {
+  await fastrelay.markConversationRead(conversationId); // socket not connected
+}
+```
+
+`startTyping`/`stopTyping`/`markDelivered`/`markRead` are fire-and-forget: they return `false` and queue nothing while the socket is down. Typing has no server-side expiry — clear a `typing.start` you never got a `typing.stop` for after a few seconds.
+
+### Catching up after a reconnect
+
+```ts
+let anchor: string | undefined;
+realtime.onConnectionEstablished(async ({ serverTime }) => {
+  if (!anchor) { anchor = serverTime; return; }
+  const sync = await fastrelay.syncChat({ since: anchor, conversationIds: localConversationIds() });
+  anchor = sync.serverTime;
+  // Upsert sync.conversations and sync.messages by id; drop sync.removedConversationIds;
+  // reload history for sync.reloadConversationIds, or everything if sync.reloadAll.
+});
+```
 
 ## Polling fallback
 
