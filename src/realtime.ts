@@ -1,5 +1,7 @@
 import type { FastrelayClient } from './client.ts';
 import type {
+  FastrelayChatEvent,
+  FastrelayConnectionEstablished,
   FastrelayConnectionState,
   FastrelayRealtimeError,
   FastrelayRealtimeEvent,
@@ -65,6 +67,10 @@ export class FastrelayRealtime {
   private readonly stateListeners = new Set<(s: FastrelayConnectionState) => void>();
   private readonly errorListeners = new Set<(e: FastrelayRealtimeError) => void>();
   private readonly videoListeners = new Set<(e: FastrelayVideoStatusEvent) => void>();
+  private readonly chatListeners = new Set<(e: FastrelayChatEvent) => void>();
+  private readonly establishedListeners = new Set<
+    (e: FastrelayConnectionEstablished) => void
+  >();
 
   private socket: FastrelayRealtimeSocket | null = null;
   private subscribeBatchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -77,6 +83,8 @@ export class FastrelayRealtime {
   private disposed = false;
   private awaitingTokenRefresh = false;
   private hasConnectedAtLeastOnce = false;
+  private hasEstablishedAtLeastOnce = false;
+  private presenceRequested = false;
   private generation = 0;
   private reconnectAttempt = 0;
 
@@ -115,6 +123,64 @@ export class FastrelayRealtime {
   onVideoStatus(callback: (event: FastrelayVideoStatusEvent) => void): Unsubscribe {
     this.videoListeners.add(callback);
     return () => this.videoListeners.delete(callback);
+  }
+
+  /**
+   * Chat events for the connected user (messages, conversations, members, receipts, typing,
+   * presence, unread totals). They need no subscription. Newer servers may send types this
+   * SDK version does not list in `FastrelayChatEvent`; handle them in a default branch.
+   */
+  onChatEvent(callback: (event: FastrelayChatEvent) => void): Unsubscribe {
+    this.chatListeners.add(callback);
+    return () => this.chatListeners.delete(callback);
+  }
+
+  /**
+   * Fires on every successful (re)connect. Keep the first `serverTime` as the chat sync
+   * anchor; after a reconnect call `client.syncChat({ since: anchor })` and store the
+   * response's `serverTime` instead.
+   */
+  onConnectionEstablished(
+    callback: (event: FastrelayConnectionEstablished) => void,
+  ): Unsubscribe {
+    this.establishedListeners.add(callback);
+    return () => this.establishedListeners.delete(callback);
+  }
+
+  /** Tell conversation members this user is typing. False when not connected (nothing is queued). */
+  startTyping(conversationId: string): boolean {
+    return this.sendChat('typing.start', conversationId);
+  }
+
+  stopTyping(conversationId: string): boolean {
+    return this.sendChat('typing.stop', conversationId);
+  }
+
+  /** Advance the delivered cursor to `seq`. False when not connected (nothing is queued). */
+  markDelivered(conversationId: string, seq: number): boolean {
+    return this.sendChat('message.delivered', conversationId, requireSeq(seq));
+  }
+
+  /**
+   * Advance the read (and delivered) cursor to `seq`, default the latest message. False
+   * when not connected (nothing is queued) — fall back to `client.markConversationRead`.
+   */
+  markRead(conversationId: string, seq?: number): boolean {
+    return this.sendChat(
+      'conversation.read',
+      conversationId,
+      seq === undefined ? undefined : requireSeq(seq),
+    );
+  }
+
+  /**
+   * Show this user as online to members of presence-enabled conversations. Re-sent after
+   * every reconnect; disconnect to go offline.
+   */
+  startPresence(): void {
+    if (this.disposed) throw new Error('FastrelayRealtime is disposed.');
+    this.presenceRequested = true;
+    if (this.state === 'connected') this.send({ type: 'presence.start' });
   }
 
   /**
@@ -208,6 +274,9 @@ export class FastrelayRealtime {
     this.stateListeners.clear();
     this.errorListeners.clear();
     this.videoListeners.clear();
+    this.chatListeners.clear();
+    this.establishedListeners.clear();
+    this.presenceRequested = false;
   }
 
   // ---- internals ---------------------------------------------------------
@@ -289,6 +358,7 @@ export class FastrelayRealtime {
       }
     }
     this.flushSubscriptionBatch();
+    if (this.presenceRequested) this.send({ type: 'presence.start' });
   }
 
   private onDisconnected(
@@ -360,7 +430,17 @@ export class FastrelayRealtime {
     const type = String(payload.type ?? '');
 
     switch (type) {
-      case 'connection.established':
+      case 'connection.established': {
+        const isReconnect = this.hasEstablishedAtLeastOnce;
+        this.hasEstablishedAtLeastOnce = true;
+        const event: FastrelayConnectionEstablished = {
+          connectionId: String(payload.connectionId ?? ''),
+          serverTime: String(payload.serverTime ?? ''),
+          isReconnect,
+        };
+        for (const listener of [...this.establishedListeners]) listener(event);
+        return;
+      }
       case 'heartbeat':
       case 'server.going_away':
         return;
@@ -388,6 +468,29 @@ export class FastrelayRealtime {
       }
     }
 
+    if (type === '') return;
+    const data =
+      payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+        ? (payload.data as Record<string, unknown>)
+        : {};
+    const eventId = String(payload.eventId ?? '');
+
+    // Chat events carry no feedId; they are addressed to this user, not to a feed.
+    if (payload.feedId === undefined || payload.feedId === null) {
+      if (eventId !== '' && !this.trackEventId(eventId)) return;
+      const chatEvent = {
+        type,
+        conversationId:
+          typeof payload.conversationId === 'string' ? payload.conversationId : null,
+        eventId,
+        createdAt:
+          payload.createdAt !== undefined ? String(payload.createdAt) : undefined,
+        data,
+      } as FastrelayChatEvent;
+      for (const listener of [...this.chatListeners]) listener(chatEvent);
+      return;
+    }
+
     const event: FastrelayRealtimeEvent = {
       type,
       feedId: String(payload.feedId ?? ''),
@@ -395,13 +498,10 @@ export class FastrelayRealtime {
       seq: typeof payload.seq === 'number' ? payload.seq : null,
       createdAt:
         payload.createdAt !== undefined ? String(payload.createdAt) : undefined,
-      data:
-        payload.data && typeof payload.data === 'object'
-          ? (payload.data as Record<string, unknown>)
-          : {},
+      data,
     };
 
-    if (event.type === '' || event.feedId === '') return;
+    if (event.feedId === '') return;
     if (event.eventId !== '' && !this.trackEventId(event.eventId)) return;
 
     this.dispatchEvent(event);
@@ -475,10 +575,19 @@ export class FastrelayRealtime {
     }
   }
 
-  private send(payload: Record<string, unknown>): void {
-    if (!this.socket || this.disposed) return;
+  private sendChat(type: string, conversationId: string, seq?: number): boolean {
+    if (this.disposed) throw new Error('FastrelayRealtime is disposed.');
+    const id = conversationId.trim();
+    if (id === '') throw new TypeError('conversationId must not be empty.');
+    if (this.state !== 'connected') return false;
+    return this.send({ type, conversationId: id, ...(seq !== undefined ? { seq } : {}) });
+  }
+
+  private send(payload: Record<string, unknown>): boolean {
+    if (!this.socket || this.disposed) return false;
     try {
       this.socket.send(JSON.stringify(payload));
+      return true;
     } catch (error) {
       this.emitError({
         code: 'SEND_FAILED',
@@ -487,6 +596,7 @@ export class FastrelayRealtime {
         cause: error,
         details: payload,
       });
+      return false;
     }
   }
 
@@ -609,6 +719,13 @@ export class FastrelayRealtime {
       return false;
     }
   }
+}
+
+function requireSeq(seq: number): number {
+  if (!Number.isSafeInteger(seq) || seq <= 0) {
+    throw new TypeError('seq must be a positive integer.');
+  }
+  return seq;
 }
 
 function toStringArray(value: unknown): string[] {

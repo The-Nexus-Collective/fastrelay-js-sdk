@@ -9,15 +9,23 @@ import type {
   CursorPage,
   FastrelayActivity,
   FastrelayBookmark,
+  FastrelayChatSync,
   FastrelayComment,
   FastrelayCommentReaction,
+  FastrelayConversation,
+  FastrelayConversationKind,
+  FastrelayConversationMember,
+  FastrelayConversationQuery,
+  FastrelayConversationRole,
   FastrelayFeedActivityPin,
   FastrelayFeedback,
   FastrelayFile,
   FastrelayFileUpload,
+  FastrelayMessage,
   FastrelayModerationFlag,
   FastrelayPoll,
   FastrelayReaction,
+  FastrelayUnreadTotals,
   FastrelayUser,
   FastrelayUserMute,
   FastrelayVideo,
@@ -905,6 +913,240 @@ export class FastrelayClient {
     return this.listMutes(query, options);
   }
 
+  // ---- chat ----------------------------------------------------------------
+  // Blocking a user is a mute: createMute(userId, { type: 'block' }).
+
+  /**
+   * Creates a group conversation, or a direct one with exactly one other member. An
+   * existing direct conversation between the same two users is returned instead.
+   */
+  createConversation(
+    request: {
+      kind?: FastrelayConversationKind;
+      type?: string;
+      members: string[];
+      name?: string;
+      image?: string;
+      custom?: Record<string, unknown>;
+      presenceEnabled?: boolean;
+    },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversation> {
+    return this.request('POST', '/v1/conversations', { body: request, options });
+  }
+
+  /** The user's conversations, by default most recent message first. */
+  queryConversations(
+    query: FastrelayConversationQuery = {},
+    options?: FastrelayRequestOptions,
+  ): Promise<CursorPage<FastrelayConversation>> {
+    return this.request('POST', '/v1/conversations/query', { body: query, options });
+  }
+
+  getConversation(
+    conversationId: string,
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversation> {
+    return this.request('GET', `/v1/conversations/${enc(conversationId)}`, { options });
+  }
+
+  updateConversation(
+    conversationId: string,
+    request: {
+      name?: string;
+      image?: string;
+      custom?: Record<string, unknown>;
+      presenceEnabled?: boolean;
+      frozen?: boolean;
+    },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversation> {
+    return this.request('PATCH', `/v1/conversations/${enc(conversationId)}`, {
+      body: request,
+      options,
+    });
+  }
+
+  /** Permanently deletes the conversation with its members and messages. */
+  deleteConversation(
+    conversationId: string,
+    options?: FastrelayRequestOptions,
+  ): Promise<void> {
+    return this.request('DELETE', `/v1/conversations/${enc(conversationId)}`, {
+      options,
+    });
+  }
+
+  /**
+   * Permanently removes all messages so far and resets unread counts. Appends a
+   * `conversation.truncated` system message unless `systemMessage` is false.
+   */
+  truncateConversation(
+    conversationId: string,
+    request: { systemMessage?: boolean } = {},
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversation> {
+    return this.request(
+      'POST',
+      `/v1/conversations/${enc(conversationId)}/truncate`,
+      { body: request, options },
+    );
+  }
+
+  listConversationMembers(
+    conversationId: string,
+    query?: ListQuery,
+    options?: FastrelayRequestOptions,
+  ): Promise<CursorPage<FastrelayConversationMember>> {
+    return this.request('GET', `/v1/conversations/${enc(conversationId)}/members`, {
+      query: { limit: query?.limit, cursor: query?.cursor },
+      options,
+    });
+  }
+
+  addConversationMembers(
+    conversationId: string,
+    userIds: string[],
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversation> {
+    return this.request('POST', `/v1/conversations/${enc(conversationId)}/members`, {
+      body: { userIds },
+      options,
+    });
+  }
+
+  /** Changes a member's role and/or restriction (`'none'` lifts it), optionally until an expiry. */
+  updateConversationMember(
+    conversationId: string,
+    userId: string,
+    request: {
+      role?: FastrelayConversationRole;
+      restriction?: 'banned' | 'muted' | 'none';
+      restrictionExpiresAt?: string | Date;
+    },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversationMember> {
+    return this.request(
+      'PATCH',
+      `/v1/conversations/${enc(conversationId)}/members/${enc(userId)}`,
+      {
+        body: {
+          ...request,
+          restrictionExpiresAt: toIsoString(request.restrictionExpiresAt),
+        },
+        options,
+      },
+    );
+  }
+
+  /** Removes a member; pass your own user id to leave. */
+  removeConversationMember(
+    conversationId: string,
+    userId: string,
+    options?: FastrelayRequestOptions,
+  ): Promise<void> {
+    return this.request(
+      'DELETE',
+      `/v1/conversations/${enc(conversationId)}/members/${enc(userId)}`,
+      { options },
+    );
+  }
+
+  /** Pass `options.idempotencyKey` to make retries safe. */
+  sendMessage(
+    conversationId: string,
+    request: {
+      text?: string;
+      custom?: Record<string, unknown>;
+      replyToId?: string;
+      silent?: boolean;
+    },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayMessage> {
+    return this.request('POST', `/v1/conversations/${enc(conversationId)}/messages`, {
+      body: request,
+      options,
+    });
+  }
+
+  /**
+   * Messages in ascending seq order. `cursor` is an exclusive seq: `older` (default) pages
+   * back from it (default: latest), `newer` pages forward (default: start). `around` returns
+   * a window of `limit` messages centred on that seq.
+   */
+  listMessages(
+    conversationId: string,
+    query?: {
+      cursor?: string | number;
+      direction?: 'older' | 'newer';
+      around?: number;
+      limit?: number;
+    },
+    options?: FastrelayRequestOptions,
+  ): Promise<CursorPage<FastrelayMessage>> {
+    return this.request('GET', `/v1/conversations/${enc(conversationId)}/messages`, {
+      query: {
+        cursor: query?.cursor,
+        direction: query?.direction,
+        around: query?.around,
+        limit: query?.limit,
+      },
+      options,
+    });
+  }
+
+  updateMessage(
+    messageId: string,
+    request: { text?: string; custom?: Record<string, unknown> },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayMessage> {
+    return this.request('PATCH', `/v1/messages/${enc(messageId)}`, {
+      body: request,
+      options,
+    });
+  }
+
+  deleteMessage(messageId: string, options?: FastrelayRequestOptions): Promise<void> {
+    return this.request('DELETE', `/v1/messages/${enc(messageId)}`, { options });
+  }
+
+  /**
+   * Advances the read (and delivered) cursor to `seq`, default the latest message, and
+   * returns the user's unread totals. Over a connected socket, `realtime.markRead` is cheaper.
+   */
+  markConversationRead(
+    conversationId: string,
+    request: { seq?: number } = {},
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayUnreadTotals> {
+    return this.request('POST', `/v1/conversations/${enc(conversationId)}/read`, {
+      body: request,
+      options,
+    });
+  }
+
+  getUnreadTotals(options?: FastrelayRequestOptions): Promise<FastrelayUnreadTotals> {
+    return this.request('GET', '/v1/chat/unread', { options });
+  }
+
+  /**
+   * Catch-up after a reconnect: what changed since `since` (the previous sync's
+   * `serverTime`, or `connection.established`'s for the first one). `conversationIds` are
+   * the ids held locally; those the user lost access to come back as `removedConversationIds`.
+   */
+  syncChat(
+    request: { since: string | Date; conversationIds?: string[] },
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayChatSync> {
+    return this.request('POST', '/v1/chat/sync', {
+      body: {
+        since: toIsoString(request.since),
+        conversationIds: request.conversationIds ?? [],
+      },
+      options,
+    });
+  }
+
   // ---- transport -----------------------------------------------------------
 
   async request(
@@ -1047,6 +1289,10 @@ export class FastrelayClient {
         return this.token ? `Bearer ${this.token}` : undefined;
     }
   }
+}
+
+function toIsoString(value: string | Date | undefined): string | undefined {
+  return value instanceof Date ? value.toISOString() : value;
 }
 
 function readRateLimit(headers: Headers): FastrelayRateLimit | undefined {

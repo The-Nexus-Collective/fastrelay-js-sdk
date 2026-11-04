@@ -174,6 +174,160 @@ export interface FastrelayVideoStatusEvent {
   errorMessage?: string | null;
 }
 
+// ---- chat ------------------------------------------------------------------
+
+export type FastrelayConversationKind = 'direct' | 'group';
+export type FastrelayConversationRole = 'owner' | 'moderator' | 'member';
+export type FastrelayMemberRestriction = 'banned' | 'muted';
+
+export interface FastrelayConversationMember {
+  userId: string;
+  user?: FastrelayUser | null;
+  role: FastrelayConversationRole | string;
+  joinedAt: string;
+  restriction?: FastrelayMemberRestriction | string | null;
+  restrictionExpiresAt?: string | null;
+  lastDeliveredSeq?: number | null;
+  lastDeliveredAt?: string | null;
+  lastReadSeq?: number | null;
+  lastReadAt?: string | null;
+  /** Set when the conversation has presence enabled; null otherwise. */
+  online?: boolean | null;
+  lastActiveAt?: string | null;
+}
+
+export interface FastrelayReplyPreview {
+  id: string;
+  seq?: number | null;
+  userId?: string | null;
+  text?: string | null;
+  deleted: boolean;
+}
+
+export interface FastrelayMessage {
+  id: string;
+  conversationId: string;
+  seq: number;
+  /** `system` messages have no `userId`/`text`; `custom` holds `{ event, actorId, userIds }`. */
+  type: 'regular' | 'system' | string;
+  silent: boolean;
+  userId?: string | null;
+  text?: string | null;
+  custom: Record<string, unknown>;
+  replyToId?: string | null;
+  replyTo?: FastrelayReplyPreview | null;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FastrelayConversation {
+  id: string;
+  kind: FastrelayConversationKind | string;
+  type: string;
+  name?: string | null;
+  image?: string | null;
+  custom: Record<string, unknown>;
+  presenceEnabled: boolean;
+  frozen: boolean;
+  createdBy?: string | null;
+  lastMessageSeq: number;
+  lastMessageAt?: string | null;
+  truncatedSeq?: number | null;
+  truncatedAt?: string | null;
+  memberCount: number;
+  /** The first 100 members by join time. Omitted from realtime events. */
+  members?: FastrelayConversationMember[] | null;
+  unreadCount?: number | null;
+  /** Latest visible message. Query results only. */
+  lastMessage?: FastrelayMessage | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FastrelayUnreadTotals {
+  totalUnread: number;
+  unreadConversations: number;
+}
+
+export interface FastrelayChatSync {
+  /** Pass as `since` on the next sync. */
+  serverTime: string;
+  conversations: FastrelayConversation[];
+  /** Created, edited or deleted messages in changed conversations not in `reloadConversationIds`. */
+  messages: FastrelayMessage[];
+  /** Requested conversations the user can no longer access. */
+  removedConversationIds: string[];
+  /** Conversations with too many changed messages; reload their history. */
+  reloadConversationIds: string[];
+  /** Too many conversations changed; reload them all via `queryConversations`. */
+  reloadAll: boolean;
+  unread: FastrelayUnreadTotals;
+}
+
+export interface FastrelayConversationFilter {
+  kind?: FastrelayConversationKind;
+  type?: string;
+  /** Conversations containing all of these users. */
+  members?: string[];
+  /** JSON containment match against the conversation's `custom`. */
+  custom?: Record<string, unknown>;
+  frozen?: boolean;
+  hasUnread?: boolean;
+}
+
+export interface FastrelayConversationQuery {
+  filter?: FastrelayConversationFilter;
+  sort?: 'lastMessageAt' | 'createdAt' | 'updatedAt' | 'unreadCount';
+  direction?: 'asc' | 'desc';
+  limit?: number;
+  cursor?: string;
+}
+
+interface ChatEventBase<T extends string, D> {
+  type: T;
+  conversationId?: string | null;
+  eventId: string;
+  createdAt?: string;
+  data: D;
+}
+
+export interface FastrelayReceiptData {
+  userId: string;
+  lastDeliveredSeq?: number | null;
+  lastDeliveredAt?: string | null;
+  lastReadSeq?: number | null;
+  lastReadAt?: string | null;
+}
+
+/**
+ * A chat event delivered over the realtime socket to the users it concerns — no feed
+ * subscription needed. Narrow on `type` to get the typed `data`; unknown types from newer
+ * servers arrive with raw `data`.
+ */
+export type FastrelayChatEvent =
+  | ChatEventBase<'message.new' | 'message.updated' | 'message.deleted', { message: FastrelayMessage }>
+  | ChatEventBase<'conversation.updated' | 'conversation.truncated', { conversation: FastrelayConversation }>
+  | ChatEventBase<'conversation.deleted', Record<string, never>>
+  | ChatEventBase<'member.added', { conversation: FastrelayConversation; userIds: string[] }>
+  | ChatEventBase<'member.removed', { userId: string }>
+  | ChatEventBase<'member.updated', { member: FastrelayConversationMember }>
+  | ChatEventBase<'receipt.delivered' | 'receipt.read', FastrelayReceiptData>
+  | ChatEventBase<'typing.start' | 'typing.stop', { userId: string }>
+  | ChatEventBase<'presence.changed', { userId: string; online: boolean; lastActiveAt?: string | null }>
+  | ChatEventBase<'unread.updated', { totals: FastrelayUnreadTotals }>;
+
+/** Raw shape of any chat event, including types this SDK version does not know. */
+export type FastrelayRawChatEvent = ChatEventBase<string, Record<string, unknown>>;
+
+export interface FastrelayConnectionEstablished {
+  connectionId: string;
+  /** Server clock at connect; the first `syncChat({ since })` anchor. */
+  serverTime: string;
+  isReconnect: boolean;
+}
+
 export interface CursorPage<T> {
   data: T[];
   nextCursor?: string | null;
