@@ -218,8 +218,13 @@ export interface FastrelayMessage {
   custom: Record<string, unknown>;
   replyToId?: string | null;
   replyTo?: FastrelayReplyPreview | null;
-  /** Reaction type to the ids of the users who added it, in the order they reacted. */
+  /**
+   * Reaction type to the ids of the first 100 users who added it, in the order they reacted.
+   * Page the rest with `listMessageReactionUsers` when `reactionCounts` is higher.
+   */
   reactions: Record<string, string[]>;
+  /** Reaction type to the total number of users who added it. */
+  reactionCounts: Record<string, number>;
   editedAt?: string | null;
   deletedAt?: string | null;
   createdAt: string;

@@ -1151,6 +1151,22 @@ export class FastrelayClient {
   }
 
   /**
+   * The ids of the users who added `type`, in the order they reacted, up to 100 per page.
+   * `cursor` is the previous page's `nextCursor`.
+   */
+  listMessageReactionUsers(
+    messageId: string,
+    type: string,
+    query?: { cursor?: string; limit?: number },
+    options?: FastrelayRequestOptions,
+  ): Promise<CursorPage<string>> {
+    return this.request('GET', `/v1/messages/${enc(messageId)}/reactions/${enc(type)}`, {
+      query: { cursor: query?.cursor, limit: query?.limit },
+      options,
+    });
+  }
+
+  /**
    * Advances the read (and delivered) cursor to `seq`, default the latest message, and
    * returns the user's unread totals. Over a connected socket, `realtime.markRead` is cheaper.
    */

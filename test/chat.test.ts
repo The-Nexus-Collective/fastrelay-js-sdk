@@ -97,6 +97,8 @@ test('message, read, unread and sync endpoints', async () => {
   await client.deleteMessage('msg_1');
   await client.addMessageReaction('msg_1', '❤️');
   await client.removeMessageReaction('msg_1', '❤️');
+  await client.listMessageReactionUsers('msg_1', '❤️');
+  await client.listMessageReactionUsers('msg_1', '❤️', { cursor: '100', limit: 50 });
   await client.muteConversation('cnv_1');
   await client.unmuteConversation('cnv_1');
   await client.markConversationRead('cnv_1');
@@ -118,6 +120,8 @@ test('message, read, unread and sync endpoints', async () => {
       ['DELETE', 'https://api.test/v1/messages/msg_1', undefined],
       ['POST', 'https://api.test/v1/messages/msg_1/reactions', { type: '❤️' }],
       ['DELETE', 'https://api.test/v1/messages/msg_1/reactions/%E2%9D%A4%EF%B8%8F', undefined],
+      ['GET', 'https://api.test/v1/messages/msg_1/reactions/%E2%9D%A4%EF%B8%8F', undefined],
+      ['GET', 'https://api.test/v1/messages/msg_1/reactions/%E2%9D%A4%EF%B8%8F?cursor=100&limit=50', undefined],
       ['PUT', 'https://api.test/v1/conversations/cnv_1/notifications', { muted: true }],
       ['PUT', 'https://api.test/v1/conversations/cnv_1/notifications', { muted: false }],
       ['POST', 'https://api.test/v1/conversations/cnv_1/read', {}],
