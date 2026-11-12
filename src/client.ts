@@ -1039,6 +1039,30 @@ export class FastrelayClient {
     );
   }
 
+  /**
+   * Mutes notifications for the current user in this conversation: messages still arrive and
+   * count as unread, but the app's backend sees `notificationsMuted` on each `message.created`
+   * webhook and sends no push. Only you see the setting (`notificationsMuted` on your member).
+   */
+  muteConversation(conversationId: string, options?: FastrelayRequestOptions): Promise<FastrelayConversationMember> {
+    return this.setConversationNotificationsMuted(conversationId, true, options);
+  }
+
+  unmuteConversation(conversationId: string, options?: FastrelayRequestOptions): Promise<FastrelayConversationMember> {
+    return this.setConversationNotificationsMuted(conversationId, false, options);
+  }
+
+  private setConversationNotificationsMuted(
+    conversationId: string,
+    muted: boolean,
+    options?: FastrelayRequestOptions,
+  ): Promise<FastrelayConversationMember> {
+    return this.request('PUT', `/v1/conversations/${enc(conversationId)}/notifications`, {
+      body: { muted },
+      options,
+    });
+  }
+
   /** Removes a member; pass your own user id to leave. */
   removeConversationMember(
     conversationId: string,
@@ -1108,6 +1132,22 @@ export class FastrelayClient {
 
   deleteMessage(messageId: string, options?: FastrelayRequestOptions): Promise<void> {
     return this.request('DELETE', `/v1/messages/${enc(messageId)}`, { options });
+  }
+
+  /**
+   * Adds the current user's reaction of `type` (1–64 characters, e.g. an emoji) and returns the
+   * message. Adding one you already hold changes nothing; a message holds at most 25 types.
+   */
+  addMessageReaction(messageId: string, type: string, options?: FastrelayRequestOptions): Promise<FastrelayMessage> {
+    return this.request('POST', `/v1/messages/${enc(messageId)}/reactions`, {
+      body: { type },
+      options,
+    });
+  }
+
+  /** Removes the current user's reaction of `type` and returns the message. */
+  removeMessageReaction(messageId: string, type: string, options?: FastrelayRequestOptions): Promise<FastrelayMessage> {
+    return this.request('DELETE', `/v1/messages/${enc(messageId)}/reactions/${enc(type)}`, { options });
   }
 
   /**

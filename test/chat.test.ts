@@ -95,6 +95,10 @@ test('message, read, unread and sync endpoints', async () => {
   await client.listMessages('cnv_1', { around: 12 });
   await client.updateMessage('msg_1', { text: 'edited' });
   await client.deleteMessage('msg_1');
+  await client.addMessageReaction('msg_1', '❤️');
+  await client.removeMessageReaction('msg_1', '❤️');
+  await client.muteConversation('cnv_1');
+  await client.unmuteConversation('cnv_1');
   await client.markConversationRead('cnv_1');
   await client.markConversationRead('cnv_1', { seq: 7 });
   await client.getUnreadTotals();
@@ -112,6 +116,10 @@ test('message, read, unread and sync endpoints', async () => {
       ['GET', 'https://api.test/v1/conversations/cnv_1/messages?around=12', undefined],
       ['PATCH', 'https://api.test/v1/messages/msg_1', { text: 'edited' }],
       ['DELETE', 'https://api.test/v1/messages/msg_1', undefined],
+      ['POST', 'https://api.test/v1/messages/msg_1/reactions', { type: '❤️' }],
+      ['DELETE', 'https://api.test/v1/messages/msg_1/reactions/%E2%9D%A4%EF%B8%8F', undefined],
+      ['PUT', 'https://api.test/v1/conversations/cnv_1/notifications', { muted: true }],
+      ['PUT', 'https://api.test/v1/conversations/cnv_1/notifications', { muted: false }],
       ['POST', 'https://api.test/v1/conversations/cnv_1/read', {}],
       ['POST', 'https://api.test/v1/conversations/cnv_1/read', { seq: 7 }],
       ['GET', 'https://api.test/v1/chat/unread', undefined],
