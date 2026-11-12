@@ -1,6 +1,6 @@
 {
   "name": "@fastrelay/js-sdk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "JavaScript/TypeScript SDK for fastrelay feed APIs.",
   "homepage": "https://github.com/The-Nexus-Collective/fastrelay-js-sdk",
   "repository": {

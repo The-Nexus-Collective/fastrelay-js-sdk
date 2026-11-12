@@ -109,7 +109,7 @@ await fastrelay.markConversationRead(dm.id); // returns { totalUnread, unreadCon
 const totals = await fastrelay.getUnreadTotals();
 ```
 
-Also: `getConversation`, `updateConversation` (name, image, custom, `presenceEnabled`, `frozen`), `deleteConversation`, `truncateConversation`, `listConversationMembers`, `addConversationMembers`, `updateConversationMember` (role, `banned`/`muted` restriction), `removeConversationMember` (your own id leaves), `updateMessage`, `deleteMessage`. Block a user with `createMute(userId, { type: 'block' })`; report a message with `createFlag('message', messageId, { reason })`.
+Also: `getConversation`, `updateConversation` (name, image, custom, `presenceEnabled`, `frozen`), `deleteConversation`, `truncateConversation`, `listConversationMembers`, `addConversationMembers`, `updateConversationMember` (role, `banned`/`muted` restriction), `removeConversationMember` (your own id leaves), `updateMessage`, `deleteMessage`, `addMessageReaction`/`removeMessageReaction` (a message's `reactions` maps each type to the first 100 users who added it and `reactionCounts` to the totals; `listMessageReactionUsers` pages the rest), `muteConversation`/`unmuteConversation` (no push for you: `message.created` webhooks carry `notificationsMuted` per recipient). Block a user with `createMute(userId, { type: 'block' })`; report a message with `createFlag('message', messageId, { reason })`.
 
 ### Realtime chat
 

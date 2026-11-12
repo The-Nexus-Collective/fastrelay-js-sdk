@@ -194,6 +194,8 @@ export interface FastrelayConversationMember {
   /** Set when the conversation has presence enabled; null otherwise. */
   online?: boolean | null;
   lastActiveAt?: string | null;
+  /** Your own notification setting (`muteConversation`); absent on other members. */
+  notificationsMuted?: boolean | null;
 }
 
 export interface FastrelayReplyPreview {
@@ -216,6 +218,13 @@ export interface FastrelayMessage {
   custom: Record<string, unknown>;
   replyToId?: string | null;
   replyTo?: FastrelayReplyPreview | null;
+  /**
+   * Reaction type to the ids of the first 100 users who added it, in the order they reacted.
+   * Page the rest with `listMessageReactionUsers` when `reactionCounts` is higher.
+   */
+  reactions: Record<string, string[]>;
+  /** Reaction type to the total number of users who added it. */
+  reactionCounts: Record<string, number>;
   editedAt?: string | null;
   deletedAt?: string | null;
   createdAt: string;
